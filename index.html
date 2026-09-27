@@ -7,6 +7,13 @@
      Netlify hosting facts for this site: static/SSR served via Netlify Edge. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NARA Institute — Ruang Belajar dan Tumbuh Bersama</title>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4A2E22">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="NARA Institute">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -458,6 +465,7 @@
       </button>
 
       <div id="guestControls" style="display:flex; align-items:center; gap:10px;">
+        <button class="btn btn-ghost btn-sm" id="btnInstallApp" style="display:none;" title="Install Aplikasi">⬇ Install App</button>
         <button class="btn btn-ghost btn-sm" id="btnShowLogin">Masuk</button>
         <button class="btn btn-primary btn-sm" id="btnShowRegister">Daftar</button>
       </div>
@@ -1309,6 +1317,48 @@
   refreshProgramUI();
   refreshEbookUI();
 
+})();
+</script>
+
+<!-- PWA: Service Worker + Install Button -->
+<script>
+(function() {
+  // Register Service Worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(function(reg) { console.log('SW registered:', reg.scope); })
+        .catch(function(err) { console.warn('SW registration failed:', err); });
+    });
+  }
+
+  // Tombol Install App (muncul saat browser siap)
+  var deferredPrompt = null;
+  var btnInstall = document.getElementById('btnInstallApp');
+
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (btnInstall) btnInstall.style.display = 'inline-flex';
+  });
+
+  if (btnInstall) {
+    btnInstall.addEventListener('click', function() {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(choice) {
+        if (choice.outcome === 'accepted') {
+          btnInstall.style.display = 'none';
+        }
+        deferredPrompt = null;
+      });
+    });
+  }
+
+  window.addEventListener('appinstalled', function() {
+    if (btnInstall) btnInstall.style.display = 'none';
+    deferredPrompt = null;
+  });
 })();
 </script>
 

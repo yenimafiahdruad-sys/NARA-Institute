@@ -1,0 +1,25 @@
+{
+  "name": "NARA Institute",
+  "short_name": "NARA",
+  "description": "Ruang belajar dan tumbuh bersama — e-book & kelas privat online",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBF4EC",
+  "theme_color": "#4A2E22",
+  "orientation": "portrait-primary",
+  "lang": "id",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
