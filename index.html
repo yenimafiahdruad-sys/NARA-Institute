@@ -1004,6 +1004,10 @@
 
 <script>
 (function () {
+  /* ================================================================
+     NARA Institute — logika penyimpanan: localStorage → Supabase
+     Ganti SUPABASE_ANON_KEY sebelum upload ke hosting.
+     ================================================================ */
   var SUPABASE_URL = "https://cxuiyikuvmmiprwuejtz.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4dWl5aWt1dm1taXByd3VlanR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0NzQ0MjYsImV4cCI6MjEwNjA1MDQyNn0.Hr9XN3vOyWAg5I9wkXrz8rZvkQs2R801q_ivxjChpqQ";
   var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1024,11 +1028,13 @@
     fatherless:{ title: "Fatherless" }
   };
 
-  var currentUser    = null;
-  var userPurchases  = [];
-  var savedPrograms  = [];
-  var pendingAction  = null;
+  /* ---- STATE (cache lokal, diperbarui tiap auth-change) ---------- */
+  var currentUser    = null;   // objek session.user dari Supabase Auth
+  var userPurchases  = [];     // array ebook_id yang dimiliki user
+  var savedPrograms  = [];     // array program_id yang di-bookmark
+  var pendingAction  = null;   // { type:"ebook", id:"..." }
 
+  /* ---- HELPERS -------------------------------------------------- */
   function showError(elId, msg) {
     var el = document.getElementById(elId);
     el.textContent = msg;
@@ -1039,6 +1045,7 @@
     document.getElementById("registerError").style.display = "none";
   }
 
+  /* ---- MODALS --------------------------------------------------- */
   var loginOverlay    = document.getElementById("loginOverlay");
   var registerOverlay = document.getElementById("registerOverlay");
 
@@ -1065,6 +1072,7 @@
     pendingAction = null;
   }
 
+  /* ---- REGISTER ------------------------------------------------- */
   document.getElementById("registerForm").addEventListener("submit", function (e) {
     e.preventDefault();
     var name     = document.getElementById("registerName").value.trim();
@@ -1077,6 +1085,7 @@
       .then(function (res) {
         btn.disabled = false;
         if (res.error) { showError("registerError", res.error.message); return; }
+        // Jika konfirmasi email aktif, session = null
         if (!res.data.session) {
           showError("registerError", "Cek email kamu untuk konfirmasi akun, lalu masuk.");
           return;
@@ -1086,6 +1095,7 @@
       .catch(function () { btn.disabled = false; showError("registerError", "Terjadi kesalahan. Coba lagi."); });
   });
 
+  /* ---- LOGIN ---------------------------------------------------- */
   document.getElementById("loginForm").addEventListener("submit", function (e) {
     e.preventDefault();
     var email    = document.getElementById("loginEmail").value.trim().toLowerCase();
@@ -1101,15 +1111,18 @@
           return;
         }
         closeModals();
+        // onAuthStateChange akan memanggil resolvePendingAction()
       })
       .catch(function () { btn.disabled = false; showError("loginError", "Terjadi kesalahan. Coba lagi."); });
   });
 
+  /* ---- LOGOUT --------------------------------------------------- */
   document.getElementById("btnLogout").addEventListener("click", function () {
     document.getElementById("userMenu").classList.remove("open");
     sb.auth.signOut();
   });
 
+  /* ---- USER MENU ------------------------------------------------ */
   var userChip = document.getElementById("userChip");
   var userMenu = document.getElementById("userMenu");
   userChip.addEventListener("click", function () { userMenu.classList.toggle("open"); });
@@ -1119,6 +1132,7 @@
     }
   });
 
+  /* ---- LOAD DATA USER (purchases + bookmarks) ------------------- */
   function loadUserData() {
     if (!currentUser) { userPurchases = []; savedPrograms = []; return Promise.resolve(); }
     return Promise.all([
@@ -1129,6 +1143,7 @@
     ]);
   }
 
+  /* ---- AUTH STATE LISTENER (pengganti localStorage current user) - */
   sb.auth.onAuthStateChange(function (event, session) {
     var wasSignedIn = !!currentUser;
     currentUser = session ? session.user : null;
@@ -1136,10 +1151,16 @@
       refreshAuthUI();
       refreshEbookUI();
       refreshProgramUI();
+      // Jalankan aksi yang tertunda saat SIGNED_IN
       if (event === "SIGNED_IN" && !wasSignedIn) { resolvePendingAction(); }
+      // Buka modal login otomatis saat pertama kali halaman dimuat tanpa sesi
+      if (event === "INITIAL_SESSION" && !session) {
+        setTimeout(function () { openModal(loginOverlay); }, 800);
+      }
     });
   });
 
+  /* ---- TAMPILAN AUTH ------------------------------------------- */
   function refreshAuthUI() {
     var guest   = document.getElementById("guestControls");
     var box     = document.getElementById("userControls");
@@ -1158,6 +1179,7 @@
     }
   }
 
+  /* ---- E-BOOK --------------------------------------------------- */
   function refreshEbookUI() {
     document.querySelectorAll(".ebook-btn").forEach(function (btn) {
       var id    = btn.getAttribute("data-id");
@@ -1193,6 +1215,7 @@
     });
   });
 
+  /* ---- PROGRAM BOOKMARK ---------------------------------------- */
   function refreshProgramUI() {
     var countEl = document.getElementById("savedCount");
     if (savedPrograms.length > 0) { countEl.style.display = "flex"; countEl.textContent = savedPrograms.length; }
@@ -1227,19 +1250,21 @@
   function toggleSaveProgram(id) {
     var idx = savedPrograms.indexOf(id);
     if (idx > -1) {
+      // Optimistic remove
       savedPrograms.splice(idx, 1); refreshProgramUI();
       if (currentUser) {
         sb.from("saved_programs").delete().eq("user_id", currentUser.id).eq("program_id", id)
           .then(function (r) {
-            if (r.error) { savedPrograms.push(id); refreshProgramUI(); }
+            if (r.error) { savedPrograms.push(id); refreshProgramUI(); } // rollback
           });
       }
     } else {
+      // Optimistic add
       savedPrograms.push(id); refreshProgramUI();
       if (currentUser) {
         sb.from("saved_programs").insert({ user_id: currentUser.id, program_id: id })
           .then(function (r) {
-            if (r.error) { savedPrograms.splice(savedPrograms.indexOf(id), 1); refreshProgramUI(); }
+            if (r.error) { savedPrograms.splice(savedPrograms.indexOf(id), 1); refreshProgramUI(); } // rollback
           });
       }
     }
@@ -1260,6 +1285,7 @@
   document.getElementById("closePanel").addEventListener("click", closePanel);
   document.getElementById("panelOverlay").addEventListener("click", closePanel);
 
+  /* ---- MOBILE NAV ---------------------------------------------- */
   var menuToggle = document.getElementById("menuToggle");
   var mobileNav  = document.getElementById("mobileNav");
   menuToggle.addEventListener("click", function () { mobileNav.classList.toggle("open"); });
@@ -1267,6 +1293,7 @@
     a.addEventListener("click", function () { mobileNav.classList.remove("open"); });
   });
 
+  /* ---- LEAD FORM (WhatsApp) ------------------------------------ */
   document.getElementById("leadForm").addEventListener("submit", function (e) {
     e.preventDefault();
     var wa = document.getElementById("leadWa").value.trim();
@@ -1277,6 +1304,7 @@
     });
   });
 
+  /* ---- RENDER AWAL (sebelum auth selesai dicek) ---------------- */
   refreshAuthUI();
   refreshProgramUI();
   refreshEbookUI();
@@ -1286,3 +1314,4 @@
 
 </body>
 </html>
+<script async src="/.netlify/scripts/hud?variant=public" data-nf-variant="public" data-netlify-site-id="e91e58ed-95ea-46b6-9ff1-91796cb1300b" data-app-host="app.netlify.com"></script>
